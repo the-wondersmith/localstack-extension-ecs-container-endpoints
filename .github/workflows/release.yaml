@@ -1,0 +1,103 @@
+---
+name: Build Release Binaries & Wheels
+
+on:
+  release:
+    types:
+      - created
+
+  workflow_dispatch:
+    inputs:
+      go-src-repo:
+        type: string
+        default: github.com/awslabs/amazon-ecs-local-container-endpoints
+        required: false
+        description: >-
+          The target version of the `amazon-ecs-local-container-endpoints` golang binary
+      go-src-version:
+        type: string
+        default: 1.4.2
+        required: false
+        description: >-
+          The target version of the `amazon-ecs-local-container-endpoints` golang binary
+
+permissions: write-all
+
+env:
+  PKG: amazon-ecs-local-container-endpoints
+  GO_SRC_REPO: github.com/awslabs/amazon-ecs-local-container-endpoints
+  GO_SRC_VERSION: 1.4.2
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/library/golang:1.17-alpine
+      env:
+        GOPATH: /go
+        CGO_ENABLED: "0"
+        TARGET: >-
+          ${{ inputs.go-src-repo || env.GO_SRC_REPO }}@v${{ inputs.go-src-version || env.GO_SRC_VERSION }}
+      volumes:
+        - artifacts:/go/bin
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+        os:
+          - linux
+          - darwin
+          - windows
+    steps:
+      - id: fetch-source-files
+        name: Fetch Source Files
+        shell: sh
+        run: >-
+          go install -a -n "${TARGET}" 2>&1 | grep 'go: '
+
+      - id: patch-problematic-source-files
+        if: ${{ matrix.os != 'linux' }}
+        name: Patch Problematic Source Files
+        shell: sh
+        run: |
+          find "$(go env GOPATH)" \
+            -path '**/pkg/mod/github.com/aws/amazon-ecs-agent/agent*/ecscni/*' \
+            -name 'netconfig.go' \
+            -exec sed -i 's#defaultNetworkName#"network-name"#g' {} \; \
+          && find "$(go env GOPATH)" \
+            -path '**/pkg/mod/github.com/aws/amazon-ecs-agent/agent*/config/*' \
+            -name 'config_windows.go' \
+            -exec sed -i 's#id, err := Sid.String()#id := Sid.String()#g' {} \;
+
+      - id: build-binaries
+        name: Build ${{ matrix.os }}/${{ matrix.arch }}
+        shell: sh
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: >-
+          mkdir -p "$(go env GOPATH)/bin/$(go env GOOS)_$(go env GOARCH)"
+          && go install "${TARGET}"
+          && if [ -f "$(go env GOPATH)/bin/${PKG}" ]; then
+          mv "$(go env GOPATH)/bin/${PKG}"
+          "$(go env GOPATH)/bin/$(go env GOOS)_$(go env GOARCH)/";
+          fi
+
+      - id: install-node
+        name: Install NodeJS
+        shell: sh
+        run: apk add --update --no-cache npm
+
+      - id: upload-binary
+        name: Upload ${{ matrix.os }}/${{ matrix.arch }} Binary
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          retention-days: 1
+          compression-level: 0
+          path: /go/bin/${{ matrix.os }}_${{ matrix.arch }}/${{ env.PKG }}*
+          name: >-
+            ecs-local-container-endpoints-${{ matrix.os }}-${{ matrix.arch }}${{ (matrix.os == 'windows' && '.exe') || '' }}
