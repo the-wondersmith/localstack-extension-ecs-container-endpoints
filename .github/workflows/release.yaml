@@ -29,8 +29,49 @@ env:
   GO_SRC_VERSION: 1.4.2
 
 jobs:
-  build:
-    name: build
+  build-python:
+    name: Build Python Wheel
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/library/debian:stable-slim
+      env:
+        RYE_INSTALL_OPTION: --yes
+        DEBIAN_FRONTEND: noninteractive
+      volumes:
+        - artifacts:/mnt/artifacts
+    steps:
+      - id: install-utils
+        name: Install System Utilities
+        shell: bash
+        run: >-
+          apt update
+          && apt install -yqq --no-install-recommends npm curl nodejs ca-certificates
+          && curl -sSf https://rye.astral.sh/get | bash
+
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
+
+      - id: build
+        name: Build & Publish Wheel
+        shell: bash
+        run: >-
+          source "$HOME/.rye/env"
+          && rye build --clean --out /mnt/artifacts/
+          && rye publish --yes --skip-existing --token ${{ secrets.PYPI_TOKEN }} /mnt/artifacts/localstack_extension_ecs_container_endpoints-*
+
+      - id: upload-wheel
+        name: Upload Wheel
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          retention-days: 1
+          compression-level: 0
+          path: /mnt/artifacts/localstack_extension_ecs_container_endpoints-*
+          name: localstack_extension_ecs_container_endpoints-py.zip
+
+  build-go:
+    name: Build Go Binaries
     runs-on: ubuntu-latest
     container:
       image: docker.io/library/golang:1.17-alpine
