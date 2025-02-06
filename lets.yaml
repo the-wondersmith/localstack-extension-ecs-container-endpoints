@@ -1,0 +1,75 @@
+---
+version: 0.0.55
+
+shell: bash
+
+before: |
+  export BIN_DIR="${LETS_CONFIG_DIR}/bins"
+
+commands:
+  serve-binaries:
+    description: >-
+      TODO
+    cmd: |
+      miniserve -I -v -p 9999 "${BIN_DIR}" &
+      server_pid=$!
+      
+      ngrok start local-dev > /dev/null 2>&1 &
+      tunnel_pid=$!
+      
+      wait $server_pid $tunnel_pid
+
+  rm-local-binaries:
+    description: >-
+      TODO
+    cmd: |
+      if [[ ! -d "${BIN_DIR}" ]]; then
+        echo "target bin dir not found at: ${BIN_DIR}"
+        exit 1
+      fi
+      echo -e "🗑️    Removing existing binaries ..."
+      
+      rm -rf "${BIN_DIR}"/*
+  
+  # yamllint disable rule:line-length
+  build-fresh-binaries:
+    description: >-
+      TODO
+    cmd: |
+      echo -e "🏗️    Building fresh binaries ..."
+      mkdir -p "${BIN_DIR}"
+      {
+        docker run -i \
+          -e CGO_ENABLED=0 \
+          -v "${BIN_DIR}":/go/bin \
+          --rm \
+          --name=ecs-local-endpoints-builder \
+          --entrypoint=/bin/sh docker.io/library/golang:1.17-alpine -s <<'EOF' 2>&1
+        go install -a -n github.com/awslabs/amazon-ecs-local-container-endpoints@v1.4.2 2>&1 | grep 'go: ' || exit 1
+        find "$(go env GOPATH)" -path '**/pkg/mod/github.com/aws/amazon-ecs-agent/agent*/ecscni/*' -name 'netconfig.go' -exec sed -i 's#defaultNetworkName#"network-name"#g' {} \; || exit 2
+        find "$(go env GOPATH)" -path '**/pkg/mod/github.com/aws/amazon-ecs-agent/agent*/config/*' -name 'config_windows.go' -exec sed -i 's#id, err := Sid.String()#id := Sid.String()#g' {} \; || exit 3
+        for OS in 'linux' 'darwin' 'windows'; do
+        for ARCH in 'arm64' 'amd64'; do
+        GOOS="${OS}" GOARCH="${ARCH}" go install github.com/awslabs/amazon-ecs-local-container-endpoints@v1.4.2 || exit 4;
+        done
+        done
+        mkdir -p "$(go env GOPATH)/bin/$(go env GOOS)_$(go env GOARCH)"
+        mv "$(go env GOPATH)/bin/amazon-ecs-local-container-endpoints" "$(go env GOPATH)/bin/$(go env GOOS)_$(go env GOARCH)" || exit 10
+      EOF
+      } | while read -r line; do
+        echo -e "      ${line}"
+      done
+      for TARGET in "${BIN_DIR}"/**/amazon-ecs-local-container-endpoints*; do
+        mv "${TARGET}" "${BIN_DIR}/$(gsed -E 's#bins/([^/]+)/([^./]+)([.].+)?$#\2-\1\3#g' <<< "${TARGET}" | tr '_' '-' | xargs basename)"
+        rm -r "$(dirname "${TARGET}")"
+      done
+
+  # yamllint enable rule:line-length
+  rebuild-binaries:
+    description: >-
+      TODO
+    depends:
+      - rm-local-binaries
+      - build-fresh-binaries
+    cmd: |
+      echo -e '🎉    Fresh `ecs-local-container-endpoints` binaries built successfully'
