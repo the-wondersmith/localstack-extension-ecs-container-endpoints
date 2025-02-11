@@ -33,6 +33,7 @@ LOG_PATTERN = re.compile(
     flags=re.UNICODE | re.MULTILINE,
 )
 EXT_VERSION: str = pkg_version("localstack_extension_ecs_container_endpoints")
+GO_SRC_VERSION: str = "0.0.0"
 
 
 class EcsContainerEndpointsBinary(Package):
