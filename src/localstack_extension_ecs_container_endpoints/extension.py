@@ -5,6 +5,7 @@ import re
 import logging
 import platform
 import subprocess
+from importlib.metadata import version as pkg_version
 from operator import methodcaller
 from typing import IO, AnyStr, cast
 
@@ -22,10 +23,6 @@ from more_itertools import collapse
 from rolo.routing.router import E as ENDPOINT
 from werkzeug.wrappers.response import Response
 
-from localstack_extension_ecs_container_endpoints import (
-    __version__ as extension_version,
-)
-
 
 LOG = logging.getLogger("localstack.extension.ecs-c-m-e")
 URL_TEMPLATE = (
@@ -35,6 +32,7 @@ LOG_PATTERN = re.compile(
     r"time=\"[^\"]+\" level=(?P<level>[^ ]+) msg=(?P<message>\"?.+\"?)\s*$",
     flags=re.UNICODE | re.MULTILINE,
 )
+EXT_VERSION: str = pkg_version("localstack_extension_ecs_container_endpoints")
 
 
 class EcsContainerEndpointsBinary(Package):
@@ -44,7 +42,7 @@ class EcsContainerEndpointsBinary(Package):
     """
 
     def __init__(self, *_: any, **__: any):
-        super().__init__("EcsContainerEndpoints", extension_version)
+        super().__init__("EcsContainerEndpoints", EXT_VERSION)
 
     @property
     def path(self) -> str | None:
@@ -53,7 +51,7 @@ class EcsContainerEndpointsBinary(Package):
         Returns:
             str: The absolute path to the binary.
         """
-        return self._get_installer(extension_version).get_executable_path()
+        return self._get_installer(EXT_VERSION).get_executable_path()
 
     def get_versions(self) -> list[str]:
         """Get available versions of the `amazon-ecs-local-container-endpoints` binary.
@@ -62,7 +60,7 @@ class EcsContainerEndpointsBinary(Package):
             list: List of available version strings.
         """
         return [
-            extension_version,
+            EXT_VERSION,
         ]
 
     def _get_installer(self, version: str) -> PermissionDownloadInstaller:
