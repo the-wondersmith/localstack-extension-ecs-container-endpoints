@@ -276,6 +276,8 @@ class EcsContainerEndpoints(Extension):
             ProxyRewriteHandler(forward_base_url=f"http://127.0.0.1:{self.port}"),
         )
 
+        router.add("/", host="169.254.170.2", endpoint=endpoint)
+        router.add("/<path:path>", host="169.254.170.2", endpoint=endpoint)
         router.add("/", host=f"{self.host_prefix}.<host>", endpoint=endpoint)
         router.add("/<path:path>", host=f"{self.host_prefix}.<host>", endpoint=endpoint)
 
