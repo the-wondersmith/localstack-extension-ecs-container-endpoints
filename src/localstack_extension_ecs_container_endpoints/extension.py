@@ -142,8 +142,6 @@ class ProxyRewriteHandler(ProxyHandler):
 
         kwargs["path"] = path
 
-        LOG.debug(f"proxying request: [args: {args}, kwargs: {kwargs}]")
-
         return super().__call__(*args, **kwargs)
 
 
