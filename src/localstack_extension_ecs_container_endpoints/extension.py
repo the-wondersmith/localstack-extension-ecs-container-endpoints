@@ -16,7 +16,7 @@ from localstack.utils.urls import localstack_host
 from localstack.extensions.api import Extension
 from localstack.extensions.api.http import Router, RouteHandler, ProxyHandler
 from localstack.packages import Package
-from localstack.packages.core import PermissionDownloadInstaller, GitHubReleaseInstaller
+from localstack.packages.core import GitHubReleaseInstaller
 from localstack.utils.platform import get_arch
 from localstack.utils.threads import FuncThread, start_worker_thread
 from more_itertools import collapse
@@ -25,15 +25,21 @@ from werkzeug.wrappers.response import Response
 
 
 LOG = logging.getLogger("localstack.extension.ecs-c-m-e")
-URL_TEMPLATE = (
-    "https://wondersmith.ngrok.io/amazon-ecs-local-container-endpoints-{os}-{arch}"
-)
 LOG_PATTERN = re.compile(
     r"time=\"[^\"]+\" level=(?P<level>[^ ]+) msg=(?P<message>\"?.+\"?)\s*$",
     flags=re.UNICODE | re.MULTILINE,
 )
-EXT_VERSION: str = pkg_version("localstack_extension_ecs_container_endpoints")
+
 GO_SRC_VERSION: str = "0.0.0"
+
+EXT_VERSION: str = str(
+    os.getenv("ECS_CONTAINER_ENDPOINTS_VERSION")
+    or pkg_version("localstack_extension_ecs_container_endpoints")
+)
+EXT_REPO: str = str(
+    os.getenv("ECS_CONTAINER_ENDPOINTS_REPO")
+    or "the-wondersmith/localstack-extension-ecs-container-endpoints"
+)
 
 
 class EcsContainerEndpointsBinary(Package):
@@ -64,7 +70,7 @@ class EcsContainerEndpointsBinary(Package):
             EXT_VERSION,
         ]
 
-    def _get_installer(self, version: str) -> PermissionDownloadInstaller:
+    def _get_installer(self, version: str) -> "EcsContainerEndpointsBinaryInstaller":
         """Get the installer for the `amazon-ecs-local-container-endpoints` binary.
 
         Returns:
@@ -73,44 +79,23 @@ class EcsContainerEndpointsBinary(Package):
         return EcsContainerEndpointsBinaryInstaller(
             "amazon-ecs-local-container-endpoints",
             version,
+            EXT_REPO,
         )
 
 
-class EcsContainerEndpointsBinaryInstaller(PermissionDownloadInstaller):
-    """Installer class for ECS Container Endpoints binary.
-
-    Handles downloading and installation of the binary.
-    """
-
-    def _get_download_url(self) -> str:
-        """Get the download URL for the binary.
-
-        Returns:
-            str: Download URL for the binary.
-        """
-        return URL_TEMPLATE.format(
-            arch=get_arch(),
-            os=platform.system().casefold(),
-        )
-
-    def _get_install_marker_path(self, install_dir: str) -> str:
-        """Get the path for the installation marker file.
-
-        Args:
-            install_dir (str): The path to the local installation directory.
-
-        Returns:
-            str: Path to the installation marker file.
-        """
-
-        return os.path.join(install_dir, "amazon-ecs-local-container-endpoints")
-
-
-class GHBinaryInstaller(GitHubReleaseInstaller):
+class EcsContainerEndpointsBinaryInstaller(GitHubReleaseInstaller):
     """GitHub binary installer class.
 
     Handles installation of `amazon-ecs-local-container-endpoints` binaries from GitHub releases.
     """
+
+    @property
+    def version(self) -> str:
+        return EXT_VERSION
+
+    @version.setter
+    def version(self, _: str) -> None:
+        pass
 
     def _get_github_asset_name(self) -> str:
         """Determines the name of the asset to download based on the local operating system and processor architecture.
